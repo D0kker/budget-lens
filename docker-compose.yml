@@ -1,0 +1,21 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    expose:
+      - "8000"
+    volumes:
+      - budget_lens_data:/data
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    depends_on:
+      - api
+    ports:
+      - "28080:5173"
+
+volumes:
+  budget_lens_data:

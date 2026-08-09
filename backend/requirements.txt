@@ -1,0 +1,1 @@
+# MVP 0 uses only the Python standard library. FastAPI will be introduced with the document worker.

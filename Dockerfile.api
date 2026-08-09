@@ -1,0 +1,9 @@
+FROM python:3.11-slim
+WORKDIR /app
+COPY backend ./backend
+RUN mkdir -p /data
+ENV BUDGET_LENS_HOST=0.0.0.0 \
+    BUDGET_LENS_PORT=8000 \
+    BUDGET_LENS_DB=/data/budget-lens.sqlite
+EXPOSE 8000
+CMD ["python", "backend/app.py"]

@@ -1,0 +1,12 @@
+node_modules/
+dist/
+*.sqlite
+backend/*.sqlite
+__pycache__/
+*.py[cod]
+.env
+*.pdf
+*.png
+*.jpg
+*.jpeg
+data/
