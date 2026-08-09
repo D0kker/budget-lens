@@ -4,8 +4,10 @@ import sqlite3
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 try:
     from .email_ingest import fetch_documents
+    from .invoice_import import register_invoice
 except ImportError:
     from email_ingest import fetch_documents
+    from invoice_import import register_invoice
 
 DB_PATH = os.environ.get("BUDGET_LENS_DB", os.path.join(os.path.dirname(__file__), "budget-lens.sqlite"))
 HOST = os.environ.get("BUDGET_LENS_HOST", "0.0.0.0")
@@ -32,6 +34,20 @@ def db():
         sha256 TEXT NOT NULL UNIQUE,
         status TEXT NOT NULL DEFAULT 'pending_review',
         created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE IF NOT EXISTS invoices (
+        id INTEGER PRIMARY KEY,
+        provider TEXT NOT NULL,
+        invoice_number TEXT NOT NULL,
+        issue_date TEXT,
+        total REAL NOT NULL,
+        currency TEXT NOT NULL DEFAULT 'PAB',
+        status TEXT NOT NULL DEFAULT 'pending_payment',
+        source_xml TEXT,
+        source_pdf TEXT,
+        details_json TEXT NOT NULL DEFAULT '[]',
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(provider, invoice_number)
     );
     """)
     columns = {row[1] for row in connection.execute("PRAGMA table_info(recurring_cashflow)").fetchall()}
@@ -60,6 +76,12 @@ def email_documents():
     connection.close()
     return documents
 
+def invoices():
+    connection = db()
+    documents = [dict(row) for row in connection.execute("SELECT id,provider,invoice_number,issue_date,total,currency,status,source_xml,source_pdf FROM invoices ORDER BY issue_date DESC, id DESC").fetchall()]
+    connection.close()
+    return documents
+
 class Handler(BaseHTTPRequestHandler):
     def _send(self, status, payload):
         body = json.dumps(payload).encode()
@@ -77,6 +99,7 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/healthz": self._send(200, {"status": "ok"})
         elif self.path == "/api/summary": self._send(200, summary())
         elif self.path == "/api/email/documents": self._send(200, {"documents": email_documents()})
+        elif self.path == "/api/invoices": self._send(200, {"invoices": invoices()})
         else: self._send(404, {"error": "not_found"})
     def do_POST(self):
         length = int(self.headers.get("Content-Length", 0))

@@ -22,6 +22,7 @@ Budget Lens es un asistente para finanzas personales orientado a entender factur
 - El frontend aún no tiene build validado porque las dependencias npm no están disponibles en caché y el registro no respondió desde el entorno de ejecución.
 - El código está preparado para versionarse en Git; los documentos financieros y artefactos generados quedan excluidos mediante `.gitignore`.
 - Se implementó una primera ingestión de correo IMAP sobre TLS y solo lectura: descarga adjuntos permitidos a `data/email-inbox/`, deduplica por hash y los deja como `pending_review`; aún queda por definir el proveedor concreto y los remitentes autorizados.
+- Se registró la primera factura estructurada: Tigo, factura `0093522378`, emitida el 2026-07-20 por B/.37.60, con XML como fuente de datos y PDF como respaldo; permanece `pending_payment` y no se convirtió automáticamente en gasto recurrente.
 - Codex usa `.codex/config.toml` con `approval_policy = "on-request"` y `sandbox_mode = "workspace-write"`; las acciones fuera del workspace y el acceso de red requieren aprobación.
 - `AGENTS.md` permite delegar hasta tres subtareas independientes, priorizando investigación y validaciones; el agente principal conserva decisiones, integración y verificación final.
 
