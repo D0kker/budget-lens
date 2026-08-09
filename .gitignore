@@ -6,6 +6,7 @@ __pycache__/
 *.py[cod]
 .env
 *.pdf
+*.xml
 *.png
 *.jpg
 *.jpeg
