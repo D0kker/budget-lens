@@ -2,6 +2,10 @@ import json
 import os
 import sqlite3
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+try:
+    from .email_ingest import fetch_documents
+except ImportError:
+    from email_ingest import fetch_documents
 
 DB_PATH = os.environ.get("BUDGET_LENS_DB", os.path.join(os.path.dirname(__file__), "budget-lens.sqlite"))
 HOST = os.environ.get("BUDGET_LENS_HOST", "0.0.0.0")
@@ -17,6 +21,18 @@ def db():
     CREATE TABLE IF NOT EXISTS recurring_cashflow (id INTEGER PRIMARY KEY, name TEXT NOT NULL, kind TEXT NOT NULL CHECK(kind IN ('income','expense')), amount REAL NOT NULL DEFAULT 0, due_day INTEGER, provider TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
     CREATE TABLE IF NOT EXISTS savings_goals (id INTEGER PRIMARY KEY, name TEXT NOT NULL, target REAL NOT NULL DEFAULT 0, current REAL NOT NULL DEFAULT 0, due_date TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
     CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS email_documents (
+        id INTEGER PRIMARY KEY,
+        message_key TEXT NOT NULL,
+        sender TEXT NOT NULL,
+        subject TEXT,
+        received_at TEXT,
+        original_filename TEXT NOT NULL,
+        stored_path TEXT NOT NULL,
+        sha256 TEXT NOT NULL UNIQUE,
+        status TEXT NOT NULL DEFAULT 'pending_review',
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
     """)
     columns = {row[1] for row in connection.execute("PRAGMA table_info(recurring_cashflow)").fetchall()}
     if "due_day" not in columns: connection.execute("ALTER TABLE recurring_cashflow ADD COLUMN due_day INTEGER")
@@ -38,6 +54,12 @@ def summary():
     surplus = income - expenses
     return {"assets": assets, "debt": debt, "available": assets - minimums, "monthly_income": income, "monthly_expenses": expenses, "monthly_surplus": surplus, "recommended_debt_payment": minimums + max(0, surplus - minimums), "accounts": accounts, "debts": debts, "cashflow": cashflow, "goals": goals}
 
+def email_documents():
+    connection = db()
+    documents = [dict(row) for row in connection.execute("SELECT id,sender,subject,received_at,original_filename,status,created_at FROM email_documents ORDER BY created_at DESC").fetchall()]
+    connection.close()
+    return documents
+
 class Handler(BaseHTTPRequestHandler):
     def _send(self, status, payload):
         body = json.dumps(payload).encode()
@@ -54,11 +76,21 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path == "/healthz": self._send(200, {"status": "ok"})
         elif self.path == "/api/summary": self._send(200, summary())
+        elif self.path == "/api/email/documents": self._send(200, {"documents": email_documents()})
         else: self._send(404, {"error": "not_found"})
     def do_POST(self):
         length = int(self.headers.get("Content-Length", 0))
         try: data = json.loads(self.rfile.read(length) or b"{}")
         except json.JSONDecodeError: return self._send(400, {"error": "invalid_json"})
+        if self.path == "/api/email/sync":
+            connection = db()
+            try:
+                imported = fetch_documents(connection, limit=min(max(int(data.get("limit", 20)), 1), 100))
+                return self._send(200, {"ok": True, "imported": imported, "count": len(imported)})
+            except (OSError, RuntimeError, ValueError) as error:
+                connection.rollback(); return self._send(400, {"error": str(error)})
+            finally:
+                connection.close()
         connection = db()
         if self.path == "/api/accounts":
             if not data.get("name"): return self._send(400, {"error": "name_required"})
